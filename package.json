@@ -1,22 +1,24 @@
 {
   "name": "drive-sim",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "경쟁 없는 웹 기반 운전 연습 시뮬레이터",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "verify:physics": "node tools/verify-physics.ts"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",
     "three": "^0.186.0"
   },
   "devDependencies": {
+    "@types/node": "^26.5.0",
     "@types/three": "^0.185.4",
     "typescript": "^7.0.2",
     "vite": "^8.2.2"
-  }
+  },
+  "private": true
 }

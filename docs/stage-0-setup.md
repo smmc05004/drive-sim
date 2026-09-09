@@ -115,3 +115,74 @@ src/
 ## 예상 난이도
 
 낮음. 막힌다면 대부분 Rapier의 WASM 비동기 초기화 또는 좌표계(Three.js와 Rapier의 축 방향) 문제다.
+
+---
+
+# 구현 노트 (완료 후 기록)
+
+실제로 만들면서 문서에 없던 문제 세 가지에 부딪혔다. 모두 1단계 이후에도
+영향을 주는 내용이라 기록해 둔다.
+
+## 1. `setAdditionalMassProperties()` 가 동작하지 않는다
+
+rapier3d-compat **0.20.0** 에서 `RigidBodyDesc.setAdditionalMassProperties()` 와
+`RigidBody.setAdditionalMassProperties()` 를 쓰면 `body.mass()` 가 **0** 을 반환한다.
+질량이 0이면 차가 가속하지 않는다 (바퀴에 임펄스는 계산되지만 속도가 붙지 않는다).
+
+**대응** — 질량만 담당하는 콜라이더를 무게중심 위치에 겹쳐 둔다.
+
+```ts
+// 형상 담당 — 질량 없음
+ColliderDesc.cuboid(...halfExtents).setDensity(0)
+// 질량 담당 — 충돌·쿼리에 참여하지 않음
+ColliderDesc.cuboid(...halfExtents)
+  .setMass(mass).setTranslation(0, centerOfMassY, 0)
+  .setSensor(true).setCollisionGroups(0).setSolverGroups(0)
+```
+
+질량 콜라이더의 **형상을 차체와 같게** 해야 관성 모멘트도 차체 기준으로 계산된다.
+작은 큐브로 두면 질량과 무게중심은 맞지만 관성이 지나치게 작아 차가 팽이처럼 돈다.
+
+Rapier 업그레이드 시 이 API가 고쳐졌는지 확인하고 정석 방식으로 되돌릴 것.
+
+## 2. 지상고를 빠뜨리면 차체가 지면에 끌린다
+
+바퀴 연결점 Y를 감으로 정했더니 차체 박스 밑면이 정확히 지면에 닿아,
+바퀴는 4/4 접지인데도 차가 전혀 앞으로 나가지 않았다. 차체 박스와 지면의
+마찰이 구동력을 그대로 상쇄한 것이다.
+
+**증상이 헷갈린다** — 접지 정상, 임펄스 정상, 질량 정상인데 속도만 0이다.
+
+**대응** — 치수를 지면 기준으로 정의하고 연결점을 역산한다.
+
+```
+restingHeight    = groundClearance + chassisHeight / 2
+wheelConnectionY = wheelRadius + suspensionRestLength - restingHeight
+```
+
+`derivedGeometry()` 에 있다. 지상고나 바퀴 반지름을 바꿔도 자동으로 맞는다.
+
+## 3. 브레이크 값의 단위는 뉴턴이 아니다
+
+엔진력(`setWheelEngineForce`)은 뉴턴처럼 동작한다 — 2000N × 2륜 / 1200kg 이
+실제로 약 3 m/s² 가속으로 나온다.
+
+그런데 `setWheelBrake` 는 다르다. 같은 스케일로 2400을 주면 감속도가
+**42 m/s²** (실차 급제동의 5배) 가 나온다. 실측 결과:
+
+| 값 | 감속도 |
+|---|---|
+| 25 | 5.4 m/s² |
+| **40** | **8.0 m/s²** ← 실차 급제동 수준 |
+| 100 | 20.5 m/s² |
+| 2400 | 41.8 m/s² (타이어 마찰 한계로 포화) |
+
+1단계에서 앞뒤 브레이크 배분과 엔진 브레이크를 넣을 때도 이 스케일을 기준으로 한다.
+
+## 검증 도구
+
+`node tools/verify-physics.ts` — 브라우저 없이 물리만 검증한다.
+
+정적 자세, 전방 축 방향, 조향 방향, 제동 감속도, 고정 스텝 결정론을 확인한다.
+**좌표 규칙(전방 +Z, 우측 +X)이 실제 Rapier 동작과 일치하는지**를 코드가 아니라
+실행 결과로 확인하는 것이 목적이다. 파라미터를 만진 뒤에는 이걸 먼저 돌린다.
