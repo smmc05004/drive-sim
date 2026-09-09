@@ -1,4 +1,5 @@
 import { vehicleParams } from '../config/vehicle-params.ts'
+import type { Side } from '../driving/lane-change.ts'
 import { approach, type SteeringInput, type SteeringWheel } from '../vehicle/steering-wheel.ts'
 import type { Keyboard } from './keyboard.ts'
 import type { Mouse } from './mouse.ts'
@@ -20,6 +21,15 @@ export interface ControlState {
   /** 0 ~ 1 */
   brake: number
   gear: Gear
+  /** 방향지시등 — 토글 */
+  signal: Side | null
+  /**
+   * 어깨 너머로 보고 있는 방향.
+   *
+   * 사각지대 확인에 대응한다. 이 동작 중에는 전방이 보이지 않는다는 점까지
+   * 재현되어야 학습이 정직해진다 — 실제로도 고개를 돌리면 앞이 안 보인다.
+   */
+  looking: Side | null
 }
 
 export class DrivingControls {
@@ -28,6 +38,8 @@ export class DrivingControls {
     throttle: 0,
     brake: 0,
     gear: 'D',
+    signal: null,
+    looking: null,
   }
 
   /** 마지막으로 조향에 쓰인 장치 (표시용) */
@@ -50,6 +62,14 @@ export class DrivingControls {
     const state = this.state
 
     this.updateSteering(dt, keyboard, mouse, wheel, speed)
+    this.updateSignals(keyboard)
+
+    // 고개 돌리기는 누르고 있는 동안만 유효하다
+    state.looking = keyboard.isHeld('KeyQ')
+      ? 'left'
+      : keyboard.isHeld('KeyE')
+        ? 'right'
+        : null
 
     // ── 기어 ────────────────────────────────────────────
     const forwardKey = keyboard.isHeld('KeyW', 'ArrowUp')
@@ -114,6 +134,16 @@ export class DrivingControls {
     this.state.steering.active = active
   }
 
+  /** Z / X 로 좌·우 지시등을 토글한다. 같은 쪽을 다시 누르면 꺼진다. */
+  private updateSignals(keyboard: Keyboard): void {
+    if (keyboard.consumePress('KeyZ')) {
+      this.state.signal = this.state.signal === 'left' ? null : 'left'
+    }
+    if (keyboard.consumePress('KeyX')) {
+      this.state.signal = this.state.signal === 'right' ? null : 'right'
+    }
+  }
+
   private updateGear(dt: number, forwardKey: boolean, backwardKey: boolean, speed: number): void {
     const { gearbox } = vehicleParams
     const state = this.state
@@ -138,6 +168,8 @@ export class DrivingControls {
     this.state.throttle = 0
     this.state.brake = 0
     this.state.gear = 'D'
+    this.state.signal = null
+    this.state.looking = null
     this.gearChangeTimer = 0
   }
 }

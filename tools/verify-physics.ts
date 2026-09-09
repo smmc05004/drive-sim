@@ -44,6 +44,8 @@ async function createRig() {
       throttle: scenario.throttle ?? 0,
       brake: scenario.brake ?? 0,
       gear: scenario.gear ?? 'D',
+      signal: null,
+      looking: null,
     }
     applyControls(vehicle, controls, wheel)
     vehicle.controller.updateVehicle(FIXED_DT)

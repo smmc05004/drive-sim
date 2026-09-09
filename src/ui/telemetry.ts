@@ -2,6 +2,8 @@ import { vehicleParams } from '../config/vehicle-params.ts'
 import type { DrivingControls } from '../input/controls.ts'
 import { ALL_WHEELS, forwardSpeed, type Vehicle } from '../physics/vehicle.ts'
 import type { CameraMode } from '../render/scene.ts'
+import type { LaneChangeMonitor } from '../driving/lane-change.ts'
+import type { Traffic } from '../traffic/traffic.ts'
 import type { SteeringWheel } from '../vehicle/steering-wheel.ts'
 
 /**
@@ -26,6 +28,7 @@ export class Telemetry {
     steeringWheel: SteeringWheel,
     cameraMode: CameraMode,
     fps: number,
+    road?: { monitor: LaneChangeMonitor; traffic: Traffic },
   ): void {
     const speed = forwardSpeed(vehicle)
     const speedKmh = speed * 3.6
@@ -48,8 +51,30 @@ export class Telemetry {
       )
     }).join('\n')
 
+    // 도로에서는 차선과 차간거리를 함께 본다.
+    // 차간거리를 "몇 초"로 읽는 습관이 안전거리 판단의 핵심이다.
+    let roadLine = ''
+    if (road) {
+      const t = vehicle.body.translation()
+      const situation = road.monitor.situation(t.x, t.z, speed, road.traffic)
+      if (situation) {
+        const ahead =
+          situation.aheadGap === null
+            ? '  --'
+            : `${situation.aheadGap.toFixed(0).padStart(4)}m` +
+              (situation.headway === null ? '' : ` (${situation.headway.toFixed(1)}초)`)
+        const behind =
+          situation.behindGap === null ? '  --' : `${situation.behindGap.toFixed(0).padStart(4)}m`
+        roadLine =
+          `\n차선    <b>${situation.lane + 1}</b>차선\n` +
+          `앞차    <b>${ahead}</b>\n` +
+          `뒤차    <b>${behind}</b>\n`
+      }
+    }
+
     this.element.innerHTML =
       `속도    <b>${speedKmh.toFixed(0).padStart(4)}</b> km/h    기어 <b>${state.gear}</b>\n` +
+      roadLine +
       `\n` +
       `핸들    <b>${wheelAngle.toFixed(0).padStart(4)}</b>°   ` +
       `<b>${turns.toFixed(2).padStart(5)}</b>바퀴${steeringWheel.atLock ? '  <b>락</b>' : ''}\n` +

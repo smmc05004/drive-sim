@@ -9,8 +9,20 @@ import RAPIER from '@dimforge/rapier3d-compat'
  */
 export const FIXED_DT = 1 / 60
 
-/** 공터 한 변의 길이 (m) */
-export const GROUND_SIZE = 200
+/**
+ * 지면 한 변의 길이 (m).
+ *
+ * 1단계 공터와 2단계 도로를 같은 월드 안에 멀리 떨어뜨려 둔다.
+ * 레벨을 바꿀 때 월드를 다시 만들지 않고 차를 순간이동시키면 되므로
+ * 두 레벨을 즉시 오가며 비교할 수 있다. 안개가 서로를 가려준다.
+ */
+export const GROUND_SIZE = 800
+
+/** 1단계 공터 한 변의 길이 (m) */
+export const LOT_SIZE = 200
+
+/** 2단계 도로의 중심 X 좌표 — 공터에서 충분히 떨어뜨린다 */
+export const ROAD_X = 300
 
 let initialized = false
 

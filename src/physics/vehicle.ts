@@ -27,8 +27,12 @@ const AXLE_DIR = { x: -1, y: 0, z: 0 }
 export interface Vehicle {
   controller: RAPIER.DynamicRayCastVehicleController
   body: RAPIER.RigidBody
-  /** 스폰 지점으로 되돌린다 */
-  respawn(): void
+  /**
+   * 지정한 위치로 되돌린다 (기본: 공터 원점).
+   * @param speed 초기 전진 속도 (m/s). 도로에서는 정지 상태로 놓으면
+   *              회피 로직이 없는 뒤차에 즉시 추돌당한다.
+   */
+  respawn(x?: number, z?: number, speed?: number): void
 }
 
 export function createVehicle(world: RAPIER.World): Vehicle {
@@ -113,10 +117,10 @@ export function createVehicle(world: RAPIER.World): Vehicle {
   return {
     controller,
     body,
-    respawn() {
-      body.setTranslation({ x: 0, y: derivedGeometry().restingHeight, z: 0 }, true)
+    respawn(x = 0, z = 0, speed = 0) {
+      body.setTranslation({ x, y: derivedGeometry().restingHeight, z }, true)
       body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true)
-      body.setLinvel({ x: 0, y: 0, z: 0 }, true)
+      body.setLinvel({ x: 0, y: 0, z: speed }, true)
       body.setAngvel({ x: 0, y: 0, z: 0 }, true)
     },
   }

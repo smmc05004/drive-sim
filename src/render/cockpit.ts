@@ -37,13 +37,13 @@ export class CockpitView {
     // 보닛 — 차 앞쪽 끝이 어디인지 알려준다.
     // 실차에서도 초보가 차 길이를 가늠하는 기준이다.
     const hood = new THREE.Mesh(
-      new THREE.BoxGeometry(chassis.width - 0.1, 0.5, 0.9),
+      new THREE.BoxGeometry(chassis.width - 0.1, 0.75, 0.9),
       new THREE.MeshLambertMaterial({ color: COLORS.hood }),
     )
     // 앞유리 아래에서 시작해 차 앞쪽 끝까지. 눈높이보다 0.2m 아래에 둔다.
-    // 윗면이 눈높이보다 0.18m 아래에 오도록. 판때기가 아니라 덩어리로 둬야
-    // 차 앞쪽이 실제로 거기 있다는 느낌이 난다.
-    hood.position.set(0, -0.01, 1.75)
+    // 윗면은 눈높이보다 0.18m 아래, 아랫면은 지상고까지.
+    // 얇은 판으로 두면 그 아래로 자기 차 앞바퀴가 훤히 보인다.
+    hood.position.set(0, -0.135, 1.75)
     this.root.add(hood)
 
     // 대시보드 — 시야 하단을 막아 실내에 앉아 있는 느낌을 준다

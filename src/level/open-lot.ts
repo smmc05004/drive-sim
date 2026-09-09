@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
-import { GROUND_SIZE } from '../physics/world.ts'
+import { LOT_SIZE } from '../physics/world.ts'
 
 /**
  * 1단계 공터.
@@ -47,17 +47,17 @@ export function createOpenLot(world: RAPIER.World, scene: THREE.Scene): void {
  * 물리적으로도 막는다.
  */
 function buildBoundaryWalls(world: RAPIER.World, scene: THREE.Scene): void {
-  const half = GROUND_SIZE / 2
+  const half = LOT_SIZE / 2
   const height = 2.5
   const thickness = 0.5
 
   const wallMaterial = new THREE.MeshLambertMaterial({ color: COLORS.wall })
 
   const sides = [
-    { x: 0, z: half, w: GROUND_SIZE, d: thickness },
-    { x: 0, z: -half, w: GROUND_SIZE, d: thickness },
-    { x: half, z: 0, w: thickness, d: GROUND_SIZE },
-    { x: -half, z: 0, w: thickness, d: GROUND_SIZE },
+    { x: 0, z: half, w: LOT_SIZE, d: thickness },
+    { x: 0, z: -half, w: LOT_SIZE, d: thickness },
+    { x: half, z: 0, w: thickness, d: LOT_SIZE },
+    { x: -half, z: 0, w: thickness, d: LOT_SIZE },
   ]
 
   for (const side of sides) {

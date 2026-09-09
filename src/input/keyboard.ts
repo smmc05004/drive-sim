@@ -28,6 +28,19 @@ export class Keyboard {
     return codes.some((code) => this.pressedThisFrame.has(code))
   }
 
+  /**
+   * wasPressed 와 같지만 한 번 읽으면 소비된다.
+   *
+   * 물리는 한 프레임에 여러 스텝이 돌 수 있어서, 스텝 안에서 wasPressed 를
+   * 쓰면 토글이 두 번 뒤집힌다. 스텝 안에서 쓰는 단발 입력은 이걸 쓴다.
+   */
+  consumePress(...codes: string[]): boolean {
+    for (const code of codes) {
+      if (this.pressedThisFrame.delete(code)) return true
+    }
+    return false
+  }
+
   /** 매 렌더 프레임 끝에서 호출한다 */
   endFrame(): void {
     this.pressedThisFrame.clear()
