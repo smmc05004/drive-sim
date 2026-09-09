@@ -1,18 +1,25 @@
 /**
  * 차량 튜닝 수치 — 이 프로젝트의 모든 조작 관련 상수는 여기 모인다.
  *
- * 1단계에서 이 객체가 런타임 튜닝 패널(lil-gui)에 그대로 연결된다.
- * 따라서 값은 반드시 이 객체를 통해서만 읽어야 하고, 다른 모듈이
- * 값을 복사해 두면 안 된다. (슬라이더를 움직여도 반영되지 않는다)
+ * 튜닝 패널(lil-gui)이 이 객체를 **직접 수정**한다. 따라서 값은 반드시
+ * 이 객체를 통해서만 읽어야 하고, 다른 모듈이 값을 복사해 두면 안 된다.
+ * (슬라이더를 움직여도 반영되지 않는다)
  *
  * ── 좌표 규칙 (차체 로컬) ────────────────────────────────
  *   +Z = 전방   (Rapier 차량 컨트롤러의 기본 forward axis)
  *   +Y = 위
- *   +X = 오른쪽,  -X = 왼쪽  (한국은 좌핸들이므로 운전석은 -X)
+ *   +X = 왼쪽,  -X = 오른쪽
+ *
+ *   오른쪽이 -X 인 것이 헷갈리지만 이게 맞다. 오른손 좌표계에서
+ *   right = forward × up 이고, forward=+Z / up=+Y 이면 right=-X 가 된다.
+ *   (검증: node tools/verify-physics.ts 의 "조향 방향" 항목)
+ *
+ *   한국은 좌핸들이므로 운전석은 +X 쪽이다.
  * ──────────────────────────────────────────────────────
  */
 
 const DEG = Math.PI / 180
+const KMH = 1 / 3.6
 
 export const vehicleParams = {
   /**
@@ -34,7 +41,6 @@ export const vehicleParams = {
      * 무게중심을 차체 박스 중심보다 이만큼 아래로 내린다 (m).
      * 내리지 않으면 조금만 꺾어도 전복한다.
      * 너무 내리면 롤이 사라져 부자연스러워진다.
-     * (지면 기준 0.525m — 실제 승용차와 비슷한 값)
      */
     centerOfMassY: -0.25,
   },
@@ -72,15 +78,31 @@ export const vehicleParams = {
     sideFrictionStiffness: 1.0,
   },
 
-  /**
-   * 구동 · 제동
-   *
-   * 0단계는 단순 상수. 1단계에서 속도별 엔진력 커브, 앞뒤 브레이크 배분,
-   * 엔진 브레이크, 크립이 추가된다.
-   */
+  /** 구동 */
   drive: {
     /** N — 구동륜 1개당. 1200kg / 0→100km/h 약 10초 기준 */
     maxEngineForce: 2000,
+    /**
+     * 전진 최고 속도 (m/s).
+     * 엔진력을 속도에 따라 줄이는 데 쓴다. 이게 없으면 최고 속도가
+     * 무한히 올라간다. 정교한 토크 커브·변속기는 이 게임에 필요 없다.
+     */
+    maxSpeed: 45,
+    /** 후진 최고 속도 (m/s) — 실차도 후진은 훨씬 느리다 */
+    maxReverseSpeed: 8,
+    /**
+     * 크립 — 오토 차량이 브레이크만 떼도 스르륵 굴러가는 힘.
+     *
+     * 지금은 사소해 보이지만 4단계 주차에서는 조작의 절반이 크립이다.
+     * 좁은 주차장에서는 액셀을 거의 안 밟고 크립과 브레이크로만 움직인다.
+     */
+    creepForce: 600,
+    /** 크립만으로 도달하는 속도 (m/s). 실차는 7~10km/h 에서 안정 */
+    creepSpeed: 8 * KMH,
+  },
+
+  /** 제동 */
+  brake: {
     /**
      * 바퀴 1개당 제동력.
      *
@@ -89,41 +111,96 @@ export const vehicleParams = {
      *       보정한 것으로, 약 8 m/s² — 실차 급제동 수준이다.
      *       검증: node tools/verify-physics.ts
      */
-    maxBrakeForce: 40,
-    /** 전진 최고 속도 (m/s). 엔진력 감쇠에 사용 */
-    maxSpeed: 45,
+    maxForce: 40,
+    /**
+     * 앞바퀴 제동 배분 (0~1). 실차와 같이 앞이 강하다.
+     * 급제동 시 앞으로 쏠리는 노즈다이브가 살아난다.
+     */
+    frontBias: 0.65,
+    /**
+     * 엔진 브레이크 — 액셀을 뗐을 때 상시 걸리는 제동력.
+     * 없으면 차가 안 서고 계속 미끄러지는 느낌이 난다.
+     */
+    engineBrake: 2.0,
   },
 
   /**
-   * 조향 — 0단계 임시 구현.
+   * 핸들 — 이 프로젝트의 중심 모델.
    *
-   * 1단계에서 핸들 각도(±450°) + 조향비 모델로 교체된다.
-   * docs/steering-model.md 참조.
+   * 핸들 각도와 앞바퀴 각도를 분리하고 조향비로 연결한다.
+   * 이게 있어야 "한 바퀴 반 감았다"를 가르치고 채점할 수 있다.
+   * 자세한 근거: docs/steering-model.md
    */
-  steering: {
-    /** 앞바퀴 최대 조향각 */
+  steeringWheel: {
+    /** 한쪽 끝까지 (rad). 락투락 2.5바퀴 */
+    maxAngle: 450 * DEG,
+    /** 앞바퀴 물리적 최대 조향각 */
     maxRoadWheelAngle: 33 * DEG,
-    /** 조향 속도 (rad/s) — 핸들이 순간이동하지 않도록 */
-    rate: 60 * DEG,
-    /** 입력이 없을 때 중립으로 복귀하는 속도 (rad/s) */
-    returnRate: 90 * DEG,
+
+    /** 일반 주행 시 손으로 핸들을 돌리는 속도 (rad/s) */
+    handSpeedNormal: 240 * DEG,
+    /** 저속·정차 시 (실제로 주차할 땐 훨씬 빠르게 감는다) */
+    handSpeedParking: 480 * DEG,
+    /** 이 속도 이상이면 handSpeedNormal 을 쓴다 (m/s) */
+    handSpeedBlendSpeed: 20 * KMH,
+
+    /**
+     * 조향비 — 속도가 오르면 커진다.
+     *
+     * 일반 게임처럼 고속에서 최대 조향각 자체를 좁히면 "핸들을 끝까지
+     * 감았는데 안 꺾인다"는 거짓 감각을 학습시키게 된다. 대신 실제
+     * 가변 조향비(VGR) 차량처럼 조향비를 키운다.
+     */
+    ratioLow: 14,
+    ratioHigh: 40,
+    /** ratioLow 가 유지되는 상한 속도 (m/s) */
+    ratioLowSpeed: 20 * KMH,
+    /** ratioHigh 에 도달하는 속도 (m/s) */
+    ratioHighSpeed: 100 * KMH,
+
+    /**
+     * 자동 복원 — 실제 차는 캐스터각 때문에 속도가 붙으면 저절로 돌아온다.
+     * 정차 중에는 복원하지 않는다. 주차 시 핸들을 감아둔 채 유지해야 한다.
+     */
+    returnRate: 300 * DEG,
+    /** 복원이 최대가 되는 속도 (m/s) */
+    returnFullSpeed: 40 * KMH,
   },
 
-  /** 운전석 시점 카메라 위치 (차체 로컬, m). 좌핸들 기준 */
+  /** 액셀·브레이크 페달 응답 — 실제 페달도 즉시 100% 가 되지 않는다 */
+  pedal: {
+    /** 밟는 속도 (1/s). 3.0 이면 약 0.33초에 최대 */
+    pressRate: 3.0,
+    /** 떼는 속도 (1/s) */
+    releaseRate: 6.0,
+  },
+
+  /** 기어 */
+  gearbox: {
+    /** 전환에 필요한 정지 상태 유지 시간 (초) */
+    changeDelay: 0.3,
+    /** 정지로 간주하는 속도 (m/s) */
+    standstillSpeed: 0.3,
+  },
+
+  /** 마우스 조향 (Pointer Lock) */
+  mouse: {
+    /** 핸들 한 바퀴(360°)를 돌리는 데 필요한 마우스 이동량 (px) */
+    pixelsPerTurn: 700,
+  },
+
+  /** 운전석 시점 카메라 위치 (차체 로컬, m). 좌핸들이므로 +X(왼쪽) */
   driverSeat: {
-    x: -0.38,
+    x: 0.38,
     y: 0.42,
     z: 0.15,
   },
 }
 
-// as const 를 쓰지 않는다 — 1단계 튜닝 패널이 이 값들을 직접 수정한다.
-export type VehicleParams = typeof vehicleParams
-
 /**
  * 파라미터에서 유도되는 기하 값.
  *
- * 상수로 캐시하지 않고 매번 계산한다 — 1단계 튜닝 패널이 원본 값을
+ * 상수로 캐시하지 않고 매번 계산한다 — 튜닝 패널이 원본 값을
  * 실시간으로 바꾸기 때문이다.
  */
 export function derivedGeometry() {
@@ -143,3 +220,5 @@ export function derivedGeometry() {
 
   return { restingHeight, wheelConnectionY }
 }
+
+export type VehicleParams = typeof vehicleParams

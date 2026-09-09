@@ -12,29 +12,50 @@ export interface SceneView {
   chaseCamera: THREE.PerspectiveCamera
   activeCamera(mode: CameraMode): THREE.PerspectiveCamera
   updateChaseCamera(): void
+  /** 그림자 카메라를 차량 주변으로 옮긴다 */
+  updateShadowFocus(): void
   resize(): void
 }
 
-const SKY_COLOR = 0x1a2028
-const GROUND_COLOR = 0x2c3239
+const SKY_COLOR = 0x1b2229
+const GROUND_COLOR = 0x333a42
+
+/** 그림자 카메라가 덮는 범위 (m). 넓힐수록 그림자가 거칠어진다 */
+const SHADOW_RANGE = 30
 
 export function createScene(driverSeat: { x: number; y: number; z: number }): SceneView {
   const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.setSize(window.innerWidth, window.innerHeight)
+  renderer.shadowMap.enabled = true
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap
   document.body.appendChild(renderer.domElement)
 
   const scene = new THREE.Scene()
   scene.background = new THREE.Color(SKY_COLOR)
-  // 원거리 페이드 — 소실점을 강조해 거리 판단을 돕는다 (1단계에서 본격 조정)
-  scene.fog = new THREE.Fog(SKY_COLOR, 60, 160)
+  // 원거리 페이드 — 소실점을 강조해 거리 판단을 돕는다
+  scene.fog = new THREE.Fog(SKY_COLOR, 70, 190)
 
   // ── 조명 ──────────────────────────────────────────────
-  scene.add(new THREE.HemisphereLight(0x9fb4c7, GROUND_COLOR, 1.1))
+  scene.add(new THREE.HemisphereLight(0x9fb4c7, GROUND_COLOR, 0.9))
 
-  const sun = new THREE.DirectionalLight(0xffffff, 1.6)
-  sun.position.set(40, 60, 20)
+  // 그림자가 이 게임에서 하는 일: 물체가 지면 어디에 붙어 있는지 알려준다.
+  // 그림자가 없으면 라바콘이 얼마나 앞에 있는지 판단이 크게 어려워진다.
+  const sun = new THREE.DirectionalLight(0xffffff, 1.5)
+  sun.castShadow = true
+  sun.shadow.mapSize.set(2048, 2048)
+  sun.shadow.camera.left = -SHADOW_RANGE
+  sun.shadow.camera.right = SHADOW_RANGE
+  sun.shadow.camera.top = SHADOW_RANGE
+  sun.shadow.camera.bottom = -SHADOW_RANGE
+  sun.shadow.camera.near = 1
+  sun.shadow.camera.far = 160
+  sun.shadow.bias = -0.0006
   scene.add(sun)
+  scene.add(sun.target)
+
+  /** 태양의 방향 (차량 기준 상대 위치) */
+  const sunOffset = new THREE.Vector3(35, 55, -25)
 
   // ── 지면 ──────────────────────────────────────────────
   const ground = new THREE.Mesh(
@@ -42,16 +63,16 @@ export function createScene(driverSeat: { x: number; y: number; z: number }): Sc
     new THREE.MeshLambertMaterial({ color: GROUND_COLOR }),
   )
   ground.rotation.x = -Math.PI / 2
+  ground.receiveShadow = true
   scene.add(ground)
 
-  // 격자 — 거리·속도 판단의 1차 단서.
-  // 0단계에서는 차가 실제로 움직이는지 확인하는 최소한의 기준선이다.
-  // 본격적인 깊이 단서(그림자, 참조물, 격자 텍스처)는 1단계에서 다룬다.
-  const fineGrid = new THREE.GridHelper(GROUND_SIZE, GROUND_SIZE, 0x3d454e, 0x3d454e)
+  // 격자 — 거리·속도 판단의 1차 단서. 이 게임에서 가장 중요한 깊이 단서다.
+  // 1m 간격으로 세밀도를, 5m 간격으로 거리 감각을 준다.
+  const fineGrid = new THREE.GridHelper(GROUND_SIZE, GROUND_SIZE, 0x404850, 0x404850)
   fineGrid.position.y = 0.01
   scene.add(fineGrid)
 
-  const coarseGrid = new THREE.GridHelper(GROUND_SIZE, GROUND_SIZE / 5, 0x556270, 0x556270)
+  const coarseGrid = new THREE.GridHelper(GROUND_SIZE, GROUND_SIZE / 5, 0x5b6773, 0x5b6773)
   coarseGrid.position.y = 0.02
   scene.add(coarseGrid)
 
@@ -59,7 +80,7 @@ export function createScene(driverSeat: { x: number; y: number; z: number }): Sc
   const carRoot = new THREE.Group()
   scene.add(carRoot)
 
-  const driverCamera = new THREE.PerspectiveCamera(70, aspect(), 0.1, 400)
+  const driverCamera = new THREE.PerspectiveCamera(72, aspect(), 0.05, 400)
   driverCamera.position.set(driverSeat.x, driverSeat.y, driverSeat.z)
   // 차체 전방은 로컬 +Z 인데 Three.js 카메라는 기본적으로 -Z 를 본다
   driverCamera.rotateY(Math.PI)
@@ -76,9 +97,15 @@ export function createScene(driverSeat: { x: number; y: number; z: number }): Sc
     activeCamera: (mode) => (mode === 'driver' ? driverCamera : chaseCamera),
     updateChaseCamera() {
       // 차체 뒤 위쪽에서 내려다본다. 차체 로컬 -Z 가 후방이다.
-      const offset = new THREE.Vector3(0, 3.2, -8).applyQuaternion(carRoot.quaternion)
+      const offset = new THREE.Vector3(0, 3.2, -8.5).applyQuaternion(carRoot.quaternion)
       chaseCamera.position.copy(carRoot.position).add(offset)
-      chaseCamera.lookAt(carRoot.position.x, carRoot.position.y + 0.8, carRoot.position.z)
+      chaseCamera.lookAt(carRoot.position.x, carRoot.position.y + 0.6, carRoot.position.z)
+    },
+    updateShadowFocus() {
+      // 그림자 카메라가 200m 공터 전체를 덮으면 해상도가 무의미해진다.
+      // 차량 주변만 따라다니게 한다.
+      sun.target.position.copy(carRoot.position)
+      sun.position.copy(carRoot.position).add(sunOffset)
     },
     resize() {
       renderer.setSize(window.innerWidth, window.innerHeight)

@@ -9,6 +9,7 @@ import { ALL_WHEELS, type Vehicle } from '../physics/vehicle.ts'
  * 이 프로젝트의 우선순위가 아니다. (docs/OVERVIEW.md 참조)
  */
 export class ChassisView {
+  private readonly body: THREE.Mesh
   private readonly wheelPivots: THREE.Group[] = []
   private readonly wheelSpins: THREE.Group[] = []
 
@@ -18,19 +19,12 @@ export class ChassisView {
   ) {
     const { chassis, wheel } = vehicleParams
 
-    const body = new THREE.Mesh(
+    this.body = new THREE.Mesh(
       new THREE.BoxGeometry(chassis.width, chassis.height, chassis.length),
       new THREE.MeshLambertMaterial({ color: 0x4a7fb5 }),
     )
-    carRoot.add(body)
-
-    // 전방(+Z) 표시 — 0단계에서 축 방향을 눈으로 확인하기 위한 것
-    const nose = new THREE.Mesh(
-      new THREE.BoxGeometry(0.5, 0.12, 0.12),
-      new THREE.MeshBasicMaterial({ color: 0xffd166 }),
-    )
-    nose.position.set(0, chassis.height / 2 + 0.06, chassis.length / 2 - 0.3)
-    carRoot.add(nose)
+    this.body.castShadow = true
+    carRoot.add(this.body)
 
     const wheelGeometry = new THREE.CylinderGeometry(wheel.radius, wheel.radius, 0.25, 20)
     // 원통의 기본 축은 Y 다. 차축인 X 축에 맞춰 눕힌다.
@@ -42,12 +36,23 @@ export class ChassisView {
       // pivot: 위치 + 조향(Y축) / spin: 바퀴 회전(X축)
       const pivot = new THREE.Group()
       const spin = new THREE.Group()
-      spin.add(new THREE.Mesh(wheelGeometry, wheelMaterial))
+      const mesh = new THREE.Mesh(wheelGeometry, wheelMaterial)
+      mesh.castShadow = true
+      spin.add(mesh)
       pivot.add(spin)
       carRoot.add(pivot)
       this.wheelPivots.push(pivot)
       this.wheelSpins.push(spin)
     }
+  }
+
+  /**
+   * 운전석 시점에서는 차체 박스를 숨긴다.
+   * 박스 안에서 밖을 보면 뒷면 컬링 때문에 차체가 사라져 보이는데,
+   * 그러느니 실내(CockpitView)만 보여주는 편이 낫다.
+   */
+  setCameraMode(inDriverSeat: boolean): void {
+    this.body.visible = !inDriverSeat
   }
 
   /** 물리 상태를 시각 표현에 반영한다. 렌더 직전에 호출한다. */

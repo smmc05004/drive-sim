@@ -13,8 +13,8 @@
       #hud {
         position: fixed;
         left: 16px;
-        bottom: 16px;
-        font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+        top: 16px;
+        font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
         color: #d7dde3;
         background: rgba(10, 13, 17, 0.72);
         border: 1px solid rgba(255, 255, 255, 0.12);
@@ -53,9 +53,10 @@
     <div id="boot">물리 엔진을 불러오는 중…</div>
     <div id="hud"></div>
     <div id="help">
-      W / S · 가속 / 제동<br />
-      A / D · 조향<br />
-      C · 시점 전환 &nbsp; R · 리스폰
+      W / S · 가속 / 제동 (정지 중 유지 → 기어 전환)<br />
+      A / D · 핸들 &nbsp;·&nbsp; Space · 핸들에서 손 떼기<br />
+      화면 클릭 · 마우스 조향 (Esc 로 해제)<br />
+      C · 시점 전환 &nbsp;·&nbsp; R · 리스폰
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
